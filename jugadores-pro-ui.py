@@ -3,91 +3,98 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 import requests
 
-# --- CONFIGURACIÓN DE PÁGINA Y SEGURIDAD ---
-st.set_page_config(page_title="Admin Jugadores PRO", page_icon="⚙️")
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Admin Jugadores PRO (Dev Mode)", page_icon="🚀")
 
-# Una barrera de seguridad simple para que solo tú entres por ahora
-password_correcta = "AdminGolGana2026"  # Cambia esto por tu clave real
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+# --- 2. CONEXIÓN A NEON (DIAGNÓSTICO ROBUSTO) ---
+@st.cache_resource
+def inicializar_conexion():
+    try:
+        # Verificamos que la URL esté en los Secrets
+        if "DATABASE_URL" not in st.secrets:
+            st.error("❌ Error: No se encontró 'DATABASE_URL' en los Secrets de Streamlit.")
+            return None
+        
+        url = st.secrets["DATABASE_URL"]
+        
+        # Parche de compatibilidad para SQLAlchemy 2.0+
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+            
+        engine = create_engine(url)
+        
+        # Test de vida: ¿Neon responde?
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return engine
+    except Exception as e:
+        st.error(f"⚠️ Fallo crítico de conexión: {e}")
+        return None
 
-if not st.session_state.autenticado:
-    st.title("🔒 Acceso Restringido")
-    pwd_ingresada = st.text_input("Contraseña de Administrador:", type="password")
-    if st.button("Ingresar"):
-        if pwd_ingresada == password_correcta:
-            st.session_state.autenticado = True
-            st.rerun()
-        else:
-            st.error("Contraseña incorrecta.")
-    st.stop() # Detiene la ejecución si no está logueado
+# Intentamos conectar de entrada
+engine = inicializar_conexion()
 
-# --- CONEXIÓN A NEON ---
-# Asegúrate de poner tu DATABASE_URL en los secrets de este nuevo Streamlit
-try:
-    engine = create_engine(st.secrets["DATABASE_URL"])
-except Exception as e:
-    st.error("Falta configurar los secrets de la base de datos.")
+# --- 3. INTERFAZ DE USUARIO ---
+st.title("🚀 Jugadores PRO: Extracción Directa")
+st.markdown("Fase de pruebas: Acceso directo al motor de sincronización.")
+
+if engine is None:
+    st.warning("Revisa la pestaña de Secrets en Streamlit Cloud. La base de datos no responde.")
     st.stop()
 
-# --- INTERFAZ PRINCIPAL ---
-st.title("⚙️ Panel de Control: Jugadores PRO")
-st.markdown("Plataforma exclusiva para la gestión profunda de estadísticas.")
 st.divider()
 
-st.subheader("1. Torneos Disponibles para Sincronización")
+# --- 4. SELECCIÓN DE TORNEO ---
+st.subheader("1. Seleccionar Torneo para Sincronizar")
 
-# Buscamos los torneos finalizados directamente en tu BD
 try:
     with engine.connect() as db:
         query = text("""
-            SELECT id, nombre, fecha_fin 
+            SELECT id, nombre 
             FROM torneos 
             WHERE estado = 'Finalizado'
             ORDER BY id DESC
         """)
         df_torneos = pd.read_sql(query, db)
 except Exception as e:
-    st.error(f"Error leyendo Neon: {e}")
+    st.error(f"Error al leer torneos de Neon: {e}")
     df_torneos = pd.DataFrame()
 
 if df_torneos.empty:
-    st.info("No hay torneos en estado 'Finalizado' listos para procesar.")
+    st.info("No hay torneos finalizados en Neon.")
 else:
-    # Selector de torneo
+    # Diccionario para el selector
     opciones = dict(zip(df_torneos['nombre'], df_torneos['id']))
-    torneo_elegido = st.selectbox("Selecciona el torneo:", options=list(opciones.keys()))
-    id_torneo = opciones[torneo_elegido]
+    torneo_nombre = st.selectbox("Torneo:", options=list(opciones.keys()))
+    id_torneo = opciones[torneo_nombre]
     
-    st.caption(f"ID del Torneo seleccionado: {id_torneo}")
+    st.write(f"Sincronizando ID: `{id_torneo}`")
     
     st.divider()
-    st.subheader("2. Motor de Extracción EA Sports")
-    st.info("Este botón enviará la orden a nuestra API en Railway para que busque los partidos del torneo seleccionado y extraiga las estadísticas de cada jugador.")
     
-    # --- EL BOTÓN QUE LLAMA A TU FASTAPI ---
-    if st.button("🚀 Iniciar Sincronización por Lotes", type="primary", use_container_width=True):
+    # --- 5. EL DISPARADOR ---
+    st.subheader("2. Ejecutar Lote")
+    
+    if st.button("🔥 DISPARAR SINCRONIZACIÓN", type="primary", use_container_width=True):
         
-        # Aquí ponemos la URL de la API que tienes encendida en Railway
-        # Asegúrate de no poner una barra (/) al final del dominio si la ruta ya la tiene
+        # URL de tu API en Railway
         url_api = f"https://jugadorespro-produccion.up.railway.app/sincronizar-torneo/{id_torneo}"
         
-        with st.spinner("Enviando orden a la API... El servidor está procesando los partidos."):
+        with st.spinner("⏳ La API de Railway está trabajando... No cierres esta pestaña."):
             try:
-                # Disparamos la petición POST a FastAPI
-                respuesta = requests.post(url_api)
+                # Petición a la FastAPI (con timeout largo)
+                respuesta = requests.post(url_api, timeout=300)
                 
                 if respuesta.status_code == 200:
-                    st.success("✅ ¡La API terminó el proceso con éxito!")
-                    datos = respuesta.json()
+                    st.success("✅ ¡Misión cumplida! Datos inyectados en Neon.")
+                    res_json = respuesta.json()
                     
-                    # Mostramos el reporte que nos mandó FastAPI
-                    with st.expander("Ver reporte detallado de la API"):
-                        for linea in datos.get("detalle", []):
-                            st.write(f"- {linea}")
+                    with st.expander("Ver bitácora de la extracción"):
+                        for log in res_json.get("detalle", []):
+                            st.write(f"• {log}")
                 else:
-                    st.error(f"⚠️ La API devolvió un error (Código {respuesta.status_code})")
-                    st.write(respuesta.text)
+                    st.error(f"❌ La API falló (Status {respuesta.status_code})")
+                    st.code(respuesta.text)
                     
             except Exception as e:
-                st.error(f"❌ No se pudo conectar con la API en Railway. Detalle: {e}")
+                st.error(f"❌ Error de red/timeout: {e}")
