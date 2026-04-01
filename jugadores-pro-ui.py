@@ -52,7 +52,7 @@ try:
         query = text("""
             SELECT id, nombre 
             FROM torneos 
-            WHERE estado = 'Finalizado'
+            WHERE fase = 'FINALIZADO'
             ORDER BY id DESC
         """)
         df_torneos = pd.read_sql(query, db)
