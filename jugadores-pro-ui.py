@@ -49,6 +49,7 @@ st.subheader("1. Seleccionar Torneo para Sincronizar")
 
 try:
     with engine.connect() as db:
+        # Consulta corregida: Usamos 'fase' en lugar de 'estado'
         query = text("""
             SELECT id, nombre 
             FROM torneos 
@@ -61,7 +62,7 @@ except Exception as e:
     df_torneos = pd.DataFrame()
 
 if df_torneos.empty:
-    st.info("No hay torneos finalizados en Neon.")
+    st.info("No hay torneos con fase 'FINALIZADO' en Neon.")
 else:
     # Diccionario para el selector
     opciones = dict(zip(df_torneos['nombre'], df_torneos['id']))
@@ -77,8 +78,12 @@ else:
     
     if st.button("🔥 DISPARAR SINCRONIZACIÓN", type="primary", use_container_width=True):
         
-        # URL de tu API en Railway
-        url_api = f"https://jugadorespro-produccion.up.railway.app/sincronizar-torneo/{id_torneo}"
+        # URL de tu API en Railway (Actualizada según tu link)
+        # Aseguramos que empiece con https:// y no tenga espacios
+        URL_BASE = "https://jugadorespro-production.up.railway.app".strip("/")
+        url_api = f"{URL_BASE}/sincronizar-torneo/{id_torneo}"
+        
+        st.caption(f"Llamando a: `{url_api}`")
         
         with st.spinner("⏳ La API de Railway está trabajando... No cierres esta pestaña."):
             try:
@@ -90,8 +95,13 @@ else:
                     res_json = respuesta.json()
                     
                     with st.expander("Ver bitácora de la extracción"):
-                        for log in res_json.get("detalle", []):
-                            st.write(f"• {log}")
+                        # Usamos .get() por seguridad si la API no devuelve 'detalle'
+                        logs = res_json.get("detalle", [])
+                        if logs:
+                            for log in logs:
+                                st.write(f"• {log}")
+                        else:
+                            st.write("No se recibieron detalles específicos.")
                 else:
                     st.error(f"❌ La API falló (Status {respuesta.status_code})")
                     st.code(respuesta.text)
