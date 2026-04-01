@@ -1,3 +1,10 @@
+from fastapi import FastAPI
+from sqlalchemy import create_engine, text
+import os
+
+app = FastAPI()  # 🚨 ESTA ES LA LÍNEA QUE FALTA O ESTÁ MAL ESCRITA
+
+
 @app.post("/sincronizar-torneo/{id_torneo}")
 async def sincronizar_torneo(id_torneo: int):
     detalle_log = []
