@@ -4,7 +4,7 @@ import os
 
 app = FastAPI()
 
-# --- 1. CONEXIÓN A BASE DE DATOS (ESTILO RAILWAY) ---
+# --- 1. CONEXIÓN A BASE DE DATOS (ESTILO RAILWAY + NEON FIX) ---
 def get_engine():
     # Railway usa variables de entorno, no st.secrets
     url = os.getenv("DATABASE_URL")
@@ -15,7 +15,13 @@ def get_engine():
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     
-    return create_engine(url)
+    # 🚀 FIX PARA NEON: Evitar que el SSL se cierre inesperadamente
+    return create_engine(
+        url,
+        pool_pre_ping=True,  # Verifica que la conexión esté viva antes de lanzar el query
+        pool_recycle=300,    # Destruye y recrea las conexiones inactivas cada 5 minutos
+        connect_args={'sslmode': 'require'} # Exige SSL de forma explícita
+    )
 
 engine = get_engine()
 
